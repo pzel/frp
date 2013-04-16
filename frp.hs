@@ -25,9 +25,14 @@ instance Ord Time where
 
 {- dropping typeclasses, as shown at: http://www.haskellforall.com/2012/05/scrap-your-type-classes.html -}
 
-data Behavior a = Behavior {
-  at :: Time -> a
-} 
+data Behavior a = Behavior { at :: Time -> a }
+
+instance Functor Behavior where
+  fmap f b = Behavior { at = \t -> f (at b t) }
+
+instance Applicative Behavior where
+  pure v = Behavior { at = const v }
+  ba <*> bb = Behavior { at = \t -> (at ba) t (at bb t) }
 
 time :: Behavior Time 
 time = Behavior { at = id }
@@ -53,8 +58,7 @@ prop_time_bottoms = \tvx tvy -> isBottom         (AtLeast tvx <= At tvy) &&
 		    	     	isBottom         (AtLeast tvx <= AtLeast tvy) &&
 				(not . isBottom) (At tvx <= At tvy)
 
-prop_timebehavior_id0 = \tv0 -> at time (At tv0) == (At tv0)
-prop_timebehavior_id1 = \tv0 -> at time (AtLeast tv0) == (AtLeast tv0)
+prop_timebehavior_id = \t -> at time t == t
 
 prop_lift0 v = \t -> at (lift0 v) t == v 
   where types = (v :: Int)
@@ -66,15 +70,35 @@ prop_lift1_tupl c v = \t-> at (lift1 (c,) (lift0 v)) t == (c,) (at (lift0 v) t)
   where types = (c::Int,v::Int)
 
 prop_lift2_tupl v1 v2 = \t-> at (lift2 (,) (lift0 v1) (lift0 v2)) t == (,) (at (lift0 v1) t) (at (lift0 v2) t)
-   where types = (v1::Int, v2::Int)
+  where types = (v1::Int, v2::Int)
+
+prop_behavior_is_a_functor v = \t-> at (fmap (+1) (lift0 v)) t == (+1) (at (lift0 v) t)
+  where types = (v::Int)
+
+prop_behavior_is_applicative_pure v = \t-> at ((+1) <$> (pure v)) t == (+1) (at (pure v) t)
+  where types = (v::Int)
+
+prop_behavior_is_applicative_star v1 v2 = \t-> at ((+) <$> (pure v1) <*> (pure v2)) t == (+) (at (pure v1) t) (at (pure v2) t)
+  where types = (v1::Int, v2::Int)
+
+-- silly, but I wanted to see with my own eyes
+prop_behavior_is_applicative_star5 v1 v2 v3 v4 v5 = \t->
+  let f5 = \a b c d e -> sum [a,b,c,d,e]
+      (p1:p2:p3:p4:p5:[]) = map pure [v1,v2,v3,v4,v5]
+  in  at (f5 <$> p1 <*> p2 <*> p3 <*> p4 <*> p5) t == 
+      f5 (at p1 t) (at p2 t) (at p3 t) (at p4 t) (at p5 t)
+ where types = (v1::Int)
 
 main :: IO ()
 main = do
      quickCheck prop_time_ordering 
      quickCheck prop_time_bottoms 
-     quickCheck prop_timebehavior_id0 
-     quickCheck prop_timebehavior_id1 
+     quickCheck prop_timebehavior_id
      quickCheck prop_lift0 
      quickCheck prop_lift1_plus 
      quickCheck prop_lift1_tupl 
      quickCheck prop_lift2_tupl
+     quickCheck prop_behavior_is_a_functor
+     quickCheck prop_behavior_is_applicative_pure
+     quickCheck prop_behavior_is_applicative_star
+     quickCheck prop_behavior_is_applicative_star5
