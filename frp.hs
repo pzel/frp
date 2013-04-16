@@ -1,4 +1,4 @@
-{-# LANGUAGE Rank2Types, TupleSections  #-}
+{-# LANGUAGE Rank2Types, TemplateHaskell, TupleSections  #-}
 module Main where
 
 import Control.Applicative
@@ -17,25 +17,37 @@ instance Ord TimeValue where
   (TimeV x) `compare` PosInf    = LT
   (TimeV x) `compare` (TimeV y) = x `compare` y
 
+tvToInt :: TimeValue -> Int
+tvToInt (TimeV x) = round x
+tvToInt _       = undefined
+
 data Time = At TimeValue | AtLeast TimeValue deriving (Eq,Show)  -- Time = 𝕽 + 𝕽
 instance Ord Time where
   (At x) <= (At y)      = x <= y
   (At x) <= (AtLeast y) = x <= y
   _      <= _           = undefined
 
-{- dropping typeclasses, as shown at: http://www.haskellforall.com/2012/05/scrap-your-type-classes.html -}
+timeValue :: Time -> TimeValue
+timeValue (At x) = x
+timeValue (AtLeast x) = x
 
 data Behavior a = Behavior { at :: Time -> a }
+
+mkB :: (Time -> a) -> Behavior a
+mkB f = Behavior { at = f }
 
 instance Functor Behavior where
   fmap f b = Behavior { at = \t -> f (at b t) }
 
 instance Applicative Behavior where
-  pure v = Behavior { at = const v }
-  ba <*> bb = Behavior { at = \t -> (at ba) t (at bb t) }
+  pure = mkB . const
+  ba <*> bb = mkB $ \t -> (at ba) t (at bb t)
 
 time :: Behavior Time 
-time = Behavior { at = id }
+time = mkB id
+
+ints :: Behavior Int
+ints = mkB (tvToInt . timeValue) where
 
 lift0 :: a -> Behavior a
 lift0 = pure
@@ -46,14 +58,15 @@ lift1 = fmap
 lift2 :: (a -> b -> c) -> Behavior a -> Behavior b -> Behavior c
 lift2 f ba bb = f <$> ba <*> bb
 
-
-
 {- Test-related code & properties -}
 instance Arbitrary TimeValue where
   arbitrary = oneof [ return NegInf, TimeV <$> arbitrary, return PosInf ]
 
 instance Arbitrary Time where
   arbitrary = oneof [ At <$> arbitrary, AtLeast <$> arbitrary ]
+
+nonInfTV :: Gen TimeValue
+nonInfTV = TimeV <$> arbitrary
 
 prop_time_ordering = \tvx tvy -> tvx <= tvy ==>   At tvx <= AtLeast tvy
 prop_time_bottoms = \tvx tvy -> isBottom         (AtLeast tvx <= At tvy) &&
@@ -91,16 +104,15 @@ prop_behavior_is_applicative_star5 v1 v2 v3 v4 v5 = \t->
       f5 (at p1 t) (at p2 t) (at p3 t) (at p4 t) (at p5 t)
  where types = (v1::Int)
 
-main :: IO ()
+prop_show_time t = at (show <$> time) t == show t
+ where types = (t::Time)
+
+prop_ints = forAll nonInfTV $ \tv1->
+	    forAll nonInfTV $ \tv2-> tv1 <= tv2 ==> at ints (At tv1) <= at ints (At tv2)
+
+prop_add_ints = forAll nonInfTV $ \tv->
+                 at ((+) <$> ints <*> ints) (At tv) == (tvToInt tv) * 2
+
+main :: IO Bool
 main = do
-     quickCheck prop_time_ordering 
-     quickCheck prop_time_bottoms 
-     quickCheck prop_timebehavior_id
-     quickCheck prop_lift0 
-     quickCheck prop_lift1_plus 
-     quickCheck prop_lift1_tupl 
-     quickCheck prop_lift2_tupl
-     quickCheck prop_behavior_is_a_functor
-     quickCheck prop_behavior_is_applicative_pure
-     quickCheck prop_behavior_is_applicative_star
-     quickCheck prop_behavior_is_applicative_star5
+     $forAllProperties quickCheckResult --verboseCheckResult
