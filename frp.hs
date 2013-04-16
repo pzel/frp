@@ -1,4 +1,4 @@
-{-# LANGUAGE Rank2Types, RecordWildCards, TemplateHaskell  #-}
+{-# LANGUAGE Rank2Types, TupleSections  #-}
 module Main where
 
 import Control.Applicative
@@ -59,19 +59,22 @@ prop_timebehavior_id1 = \tv0 -> at time (AtLeast tv0) == (AtLeast tv0)
 prop_lift0 v = \t -> at (lift0 v) t == v 
   where types = (v :: Int)
 
-prop_lift1_plus c v = \t-> let f = (+ c)
-	                    in at (lift1 f (lift0 v)) t == f (at (lift0 v) t)
+prop_lift1_plus c v = \t-> at (lift1 (+c) (lift0 v)) t == (+c) (at (lift0 v) t)
   where types = (c::Int,v::Int)
 
-prop_lift1_tupl c v = \t-> let f x = (c,x)
-	                    in at (lift1 f (lift0 v)) t == f (at (lift0 v) t)
+prop_lift1_tupl c v = \t-> at (lift1 (c,) (lift0 v)) t == (c,) (at (lift0 v) t)
   where types = (c::Int,v::Int)
 
-prop_lift2_tupl v1 v2 = \t-> let f = (,)
-	                       in at (lift2 f (lift0 v1) (lift0 v2)) t == f (at (lift0 v1) t) (at (lift0 v2) t)
+prop_lift2_tupl v1 v2 = \t-> at (lift2 (,) (lift0 v1) (lift0 v2)) t == (,) (at (lift0 v1) t) (at (lift0 v2) t)
    where types = (v1::Int, v2::Int)
 
-
-runTests = $quickCheckAll
-main :: IO Bool
-main = runTests
+main :: IO ()
+main = do
+     quickCheck prop_time_ordering 
+     quickCheck prop_time_bottoms 
+     quickCheck prop_timebehavior_id0 
+     quickCheck prop_timebehavior_id1 
+     quickCheck prop_lift0 
+     quickCheck prop_lift1_plus 
+     quickCheck prop_lift1_tupl 
+     quickCheck prop_lift2_tupl
