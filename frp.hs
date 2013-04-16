@@ -38,13 +38,15 @@ time :: Behavior Time
 time = Behavior { at = id }
 
 lift0 :: a -> Behavior a
-lift0 v = Behavior { at = const v }
+lift0 = pure
 
 lift1 :: (a -> b) -> Behavior a -> Behavior b
-lift1 f ba = Behavior { at = \t -> f (at ba t) }
+lift1 = fmap
 
 lift2 :: (a -> b -> c) -> Behavior a -> Behavior b -> Behavior c
-lift2 f ba bb = Behavior { at = \t -> f (at ba t) (at bb t) }
+lift2 f ba bb = f <$> ba <*> bb
+
+
 
 {- Test-related code & properties -}
 instance Arbitrary TimeValue where
