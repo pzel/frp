@@ -13,6 +13,10 @@ instance Fractional Time where
   t1 / t2 = Time $ (getT t1) / (getT t2)
   fromRational = undefined
 
+instance Enum Time where
+  fromEnum = round . (1000 *) . getT
+  toEnum = Time . fromIntegral . (1000 *)
+
 timeToInt :: Time -> Int
 timeToInt = round . getT
 
@@ -27,15 +31,6 @@ instance Applicative Behavior where
 mkB :: (Time -> a) -> Behavior a
 mkB f = Behavior { at = f }
 
-timeTransform :: Behavior a -> Behavior Time -> Behavior a
-timeTransform b tb = mkB (\t -> at b (at tb t))
-
-time :: Behavior Time 
-time = mkB id
-
-ints :: Behavior Int
-ints = mkB timeToInt where
-
 lift0 :: a -> Behavior a
 lift0 = pure
 
@@ -44,6 +39,21 @@ lift1 = fmap
 
 lift2 :: (a -> b -> c) -> Behavior a -> Behavior b -> Behavior c
 lift2 f ba bb = f <$> ba <*> bb
+
+integral :: Num a => Behavior a -> Time -> Behavior a
+integral b from = mkB (\to-> sum (map (at b) [from .. to]))
+
+
+-- Some behaviors
+
+timeTransform :: Behavior a -> Behavior Time -> Behavior a
+timeTransform b tb = mkB (\t -> at b (at tb t))
+
+time :: Behavior Time 
+time = mkB id
+
+ints :: Behavior Int
+ints = mkB timeToInt 
 
 {- Test-related code & properties -}
 
@@ -100,6 +110,9 @@ prop_add_ints t = at ((+) <$> ints <*> ints) t == (timeToInt t) * 2
 prop_time_transform t = let timeInHalf = (/) <$> time <*> pure 2
                         in at (timeTransform ints  timeInHalf) t ==
                     ((at ints) . (at timeInHalf)) t
+
+prop_integral t0 t1 = (abs (t0 - t1)) < 15 ==>
+              at (integral time t0) t1 == sum [t0..t1]
 
 main :: IO Bool
 main = do
