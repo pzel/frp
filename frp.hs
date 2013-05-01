@@ -111,7 +111,8 @@ prop_time_transform t = let timeInHalf = (/) <$> time <*> pure 2
 prop_integral t0 t1 = (abs (t0 - t1)) < 100 ==>
               at (integral time t0) t1 == sum [t0..t1]
 
-main :: IO Bool
-main = do
-      $forAllProperties quickCheckResult
---     $forAllProperties verboseCheckResult
+runTests :: IO Bool
+runTests = $forAllProperties quickCheckResult
+
+main :: IO ()
+main = return ()
