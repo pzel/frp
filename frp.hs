@@ -1,41 +1,22 @@
-{-# LANGUAGE Rank2Types, TemplateHaskell, TupleSections  #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, TemplateHaskell, TupleSections  #-}
 module Main where
 
 import Control.Applicative
-import Test.ChasingBottoms (isBottom)
+import Data.Function
+import Data.Ratio
 import Test.QuickCheck
 import Test.QuickCheck.All
 import Test.QuickCheck.Function
 
-data TimeValue = NegInf | TimeV Float | PosInf deriving (Eq,Show)  
-instance Ord TimeValue where
-  NegInf `compare` NegInf       = EQ
-  NegInf `compare` _            = LT
-  PosInf `compare` PosInf       = EQ
-  PosInf `compare` _            = GT
-  (TimeV x) `compare` NegInf    = GT
-  (TimeV x) `compare` PosInf    = LT
-  (TimeV x) `compare` (TimeV y) = x `compare` y
+newtype Time = Time { getT :: Float } deriving (Eq,Num,Ord,Show)
+instance Fractional Time where
+  t1 / t2 = Time $ (getT t1) / (getT t2)
+  fromRational = undefined
 
-tvToInt :: TimeValue -> Int
-tvToInt (TimeV x) = round x
-tvToInt _       = undefined
-
-data Time = At TimeValue | AtLeast TimeValue deriving (Eq,Show)  -- Time = 𝕽 + 𝕽
-instance Ord Time where
-  (At x) <= (At y)      = x <= y
-  (At x) <= (AtLeast y) = x <= y
-  _      <= _           = undefined
-
-timeValue :: Time -> TimeValue
-timeValue (At x) = x
-timeValue (AtLeast x) = x
+timeToInt :: Time -> Int
+timeToInt = round . getT
 
 data Behavior a = Behavior { at :: Time -> a }
-
-mkB :: (Time -> a) -> Behavior a
-mkB f = Behavior { at = f }
-
 instance Functor Behavior where
   fmap f b = Behavior { at = \t -> f (at b t) }
 
@@ -43,11 +24,17 @@ instance Applicative Behavior where
   pure = mkB . const
   ba <*> bb = mkB $ \t -> (at ba) t (at bb t)
 
+mkB :: (Time -> a) -> Behavior a
+mkB f = Behavior { at = f }
+
+timeTransform :: Behavior a -> Behavior Time -> Behavior a
+timeTransform b tb = mkB (\t -> at b (at tb t))
+
 time :: Behavior Time 
 time = mkB id
 
 ints :: Behavior Int
-ints = mkB (tvToInt . timeValue) where
+ints = mkB timeToInt where
 
 lift0 :: a -> Behavior a
 lift0 = pure
@@ -59,19 +46,18 @@ lift2 :: (a -> b -> c) -> Behavior a -> Behavior b -> Behavior c
 lift2 f ba bb = f <$> ba <*> bb
 
 {- Test-related code & properties -}
-instance Arbitrary TimeValue where
-  arbitrary = oneof [ return NegInf, TimeV <$> arbitrary, return PosInf ]
 
 instance Arbitrary Time where
-  arbitrary = oneof [ At <$> arbitrary, AtLeast <$> arbitrary ]
+  arbitrary = Time <$> arbitrary
 
-nonInfTV :: Gen TimeValue
-nonInfTV = TimeV <$> arbitrary
+{- 
+The Time datatype has been simplified and the below no longer apply
 
 prop_time_ordering = \tvx tvy -> tvx <= tvy ==>   At tvx <= AtLeast tvy
 prop_time_bottoms = \tvx tvy -> isBottom         (AtLeast tvx <= At tvy) &&
-		    	     	isBottom         (AtLeast tvx <= AtLeast tvy) &&
-				(not . isBottom) (At tvx <= At tvy)
+                 		    	     	isBottom         (AtLeast tvx <= AtLeast tvy) &&
+				                        (not . isBottom) (At tvx <= At tvy)
+ -}
 
 prop_timebehavior_id = \t -> at time t == t
 
@@ -107,11 +93,13 @@ prop_behavior_is_applicative_star5 v1 v2 v3 v4 v5 = \t->
 prop_show_time t = at (show <$> time) t == show t
  where types = (t::Time)
 
-prop_ints = forAll nonInfTV $ \tv1->
-	    forAll nonInfTV $ \tv2-> tv1 <= tv2 ==> at ints (At tv1) <= at ints (At tv2)
+prop_ints t1 t2 =  t1 <= t2 ==> at ints (t1) <= at ints (t2)
 
-prop_add_ints = forAll nonInfTV $ \tv->
-                 at ((+) <$> ints <*> ints) (At tv) == (tvToInt tv) * 2
+prop_add_ints t = at ((+) <$> ints <*> ints) t == (timeToInt t) * 2
+
+prop_time_transform t = let timeInHalf = (/) <$> time <*> pure 2
+                        in at (timeTransform ints  timeInHalf) t ==
+                    ((at ints) . (at timeInHalf)) t
 
 main :: IO Bool
 main = do
