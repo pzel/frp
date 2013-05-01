@@ -8,17 +8,14 @@ import Test.QuickCheck
 import Test.QuickCheck.All
 import Test.QuickCheck.Function
 
-newtype Time = Time { getT :: Float } deriving (Eq,Num,Ord,Show)
+newtype Time = Time { getT :: Integer } deriving (Eq,Num,Ord,Show)
 instance Fractional Time where
-  t1 / t2 = Time $ (getT t1) / (getT t2)
+  t1 / t2 = Time $ round $ (fromIntegral (getT t1)) / (fromIntegral (getT t2))
   fromRational = undefined
 
 instance Enum Time where
-  fromEnum = round . (1000 *) . getT
-  toEnum = Time . fromIntegral . (1000 *)
-
-timeToInt :: Time -> Int
-timeToInt = round . getT
+  fromEnum = fromInteger . getT
+  toEnum = Time . toInteger
 
 data Behavior a = Behavior { at :: Time -> a }
 instance Functor Behavior where
@@ -53,7 +50,7 @@ time :: Behavior Time
 time = mkB id
 
 ints :: Behavior Int
-ints = mkB timeToInt 
+ints = mkB (fromInteger . getT)
 
 {- Test-related code & properties -}
 
@@ -105,15 +102,16 @@ prop_show_time t = at (show <$> time) t == show t
 
 prop_ints t1 t2 =  t1 <= t2 ==> at ints (t1) <= at ints (t2)
 
-prop_add_ints t = at ((+) <$> ints <*> ints) t == (timeToInt t) * 2
+prop_add_ints t = at ((+) <$> ints <*> ints) t == (fromIntegral (getT t)) * 2
 
 prop_time_transform t = let timeInHalf = (/) <$> time <*> pure 2
                         in at (timeTransform ints  timeInHalf) t ==
                     ((at ints) . (at timeInHalf)) t
 
-prop_integral t0 t1 = (abs (t0 - t1)) < 15 ==>
+prop_integral t0 t1 = (abs (t0 - t1)) < 100 ==>
               at (integral time t0) t1 == sum [t0..t1]
 
 main :: IO Bool
 main = do
-     $forAllProperties quickCheckResult --verboseCheckResult
+      $forAllProperties quickCheckResult
+--     $forAllProperties verboseCheckResult
