@@ -1,8 +1,8 @@
 test:
-	ghc ./frp.hs -e 'runTests'
+	ghc ./Frp.hs -e 'runTests'
 
 run: 
-	runhaskell ./frp.hs
+	ghc --make ./Main.hs && ./Main
 
 install:
 	cabal install ChasingBottoms
