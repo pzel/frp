@@ -5,7 +5,7 @@ import Frp
 import System.CPUTime
 
 clear :: IO ()
-clear = putStr "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"       
+clear = putStr (take 50 $ repeat '\b')
 now :: IO Time
 now = ((/1000000000.0). fromIntegral) <$> getCPUTime 
 
